@@ -7,16 +7,23 @@ interface Props {
 }
 
 export default function UndoSnackbar({ open, onClose, onUndo }: Props) {
+  const handleUndo = () => {
+    onUndo();
+    onClose(); 
+  };
+
   return (
     <Snackbar
       open={open}
-      onClose={onClose}
       autoHideDuration={4000}
+      onClose={onClose} 
       message="Task deleted"
-      action={<Button color="secondary" size="small" onClick={onUndo}>Undo</Button>}
+      action={
+        <Button color="secondary" size="small" onClick={handleUndo}>
+          Undo
+        </Button>
+      }
       anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
     />
   );
 }
-
-

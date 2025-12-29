@@ -39,6 +39,7 @@ export function useTasks(): UseTasksState {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastDeleted, setLastDeleted] = useState<Task | null>(null);
+  
   const fetchedRef = useRef(false);
 
   function normalizeTasks(input: any[]): Task[] {
@@ -60,24 +61,23 @@ export function useTasks(): UseTasksState {
     });
   }
 
-  // Initial load: public JSON -> fallback generated dummy
-  useEffect(() => {
+  // Initial Fetch
+   useEffect(() => {
+    if (fetchedRef.current) return;
+    fetchedRef.current = true;
+
     let isMounted = true;
-    async function load() {
+
+    async function loadTasks() {
       try {
         const res = await fetch('/tasks.json');
         if (!res.ok) throw new Error(`Failed to load tasks.json (${res.status})`);
         const data = (await res.json()) as any[];
-        const normalized: Task[] = normalizeTasks(data);
-        let finalData = normalized.length > 0 ? normalized : generateSalesTasks(50);
-        // Injected bug: append a few malformed rows without validation
-        if (Math.random() < 0.5) {
-          finalData = [
-            ...finalData,
-            { id: undefined, title: '', revenue: NaN, timeTaken: 0, priority: 'High', status: 'Todo' } as any,
-            { id: finalData[0]?.id ?? 'dup-1', title: 'Duplicate ID', revenue: 9999999999, timeTaken: -5, priority: 'Low', status: 'Done' } as any,
-          ];
-        }
+
+        const normalized = normalizeTasks(data);
+        const finalData =
+          normalized.length > 0 ? normalized : generateSalesTasks(50);
+
         if (isMounted) setTasks(finalData);
       } catch (e: any) {
         if (isMounted) setError(e?.message ?? 'Failed to load tasks');
@@ -88,30 +88,12 @@ export function useTasks(): UseTasksState {
         }
       }
     }
-    load();
+    loadTasks();
     return () => {
       isMounted = false;
     };
   }, []);
 
-  // Injected bug: opportunistic second fetch that can duplicate tasks on fast remounts
-  useEffect(() => {
-    // Delay to race with the primary loader and append duplicate tasks unpredictably
-    const timer = setTimeout(() => {
-      (async () => {
-        try {
-          const res = await fetch('/tasks.json');
-          if (!res.ok) return;
-          const data = (await res.json()) as any[];
-          const normalized = normalizeTasks(data);
-          setTasks(prev => [...prev, ...normalized]);
-        } catch {
-          // ignore
-        }
-      })();
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []);
 
   const derivedSorted = useMemo<DerivedTask[]>(() => {
     const withRoi = tasks.map(withDerived);
@@ -126,50 +108,73 @@ export function useTasks(): UseTasksState {
     const revenuePerHour = computeRevenuePerHour(tasks);
     const averageROI = computeAverageROI(tasks);
     const performanceGrade = computePerformanceGrade(averageROI);
-    return { totalRevenue, totalTimeTaken, timeEfficiencyPct, revenuePerHour, averageROI, performanceGrade };
+    return { 
+      totalRevenue, 
+      totalTimeTaken, 
+      timeEfficiencyPct, 
+      revenuePerHour, 
+      averageROI, 
+      performanceGrade
+     };
   }, [tasks]);
 
-  const addTask = useCallback((task: Omit<Task, 'id'> & { id?: string }) => {
-    setTasks(prev => {
+ const addTask = useCallback(
+  (task: Omit<Task, 'id'> & { id?: string }) => {
+    setTasks((prev: Task[]) => {
       const id = task.id ?? crypto.randomUUID();
-      const timeTaken = task.timeTaken <= 0 ? 1 : task.timeTaken; // auto-correct
+      const timeTaken = task.timeTaken > 0 ? task.timeTaken : 1;
       const createdAt = new Date().toISOString();
-      const status = task.status;
-      const completedAt = status === 'Done' ? createdAt : undefined;
-      return [...prev, { ...task, id, timeTaken, createdAt, completedAt }];
+      const completedAt =
+        task.status === 'Done' ? createdAt : undefined;
+
+      const newTask: Task = {
+        ...task, id, timeTaken,createdAt,completedAt,
+      };
+
+      return [...prev, newTask];
     });
-  }, []);
+  },
+  []
+);
+
 
   const updateTask = useCallback((id: string, patch: Partial<Task>) => {
-    setTasks(prev => {
-      const next = prev.map(t => {
+    setTasks((prev: Task[]) => 
+      prev.map((t:Task)=> {
         if (t.id !== id) return t;
-        const merged = { ...t, ...patch } as Task;
+
+        const merged: Task = { ...t, ...patch };
+
         if (t.status !== 'Done' && merged.status === 'Done' && !merged.completedAt) {
           merged.completedAt = new Date().toISOString();
         }
+        if ((merged.timeTaken ?? 0) <= 0) {
+        merged.timeTaken = 1;
+      }
         return merged;
-      });
-      // Ensure timeTaken remains > 0
-      return next.map(t => (t.id === id && (patch.timeTaken ?? t.timeTaken) <= 0 ? { ...t, timeTaken: 1 } : t));
-    });
+      })
+   );
   }, []);
 
-  const deleteTask = useCallback((id: string) => {
-    setTasks(prev => {
-      const target = prev.find(t => t.id === id) || null;
-      setLastDeleted(target);
-      return prev.filter(t => t.id !== id);
-    });
-  }, []);
+const deleteTask = useCallback((id: string) => {
+  setTasks((prev: Task[]) => {
+    const target = prev.find((t: Task) => t.id === id) || null;
+    setLastDeleted(target);
+    return prev.filter((t: Task) => t.id !== id);
+  });
+}, []);
 
-  const undoDelete = useCallback(() => {
-    if (!lastDeleted) return;
-    setTasks(prev => [...prev, lastDeleted]);
-    setLastDeleted(null);
-  }, [lastDeleted]);
+const undoDelete = useCallback(() => {
+  if (!lastDeleted) return;
+  setTasks((prev: Task[]) => [...prev, lastDeleted]);
+  setLastDeleted(null);
+}, [lastDeleted]);
 
-  return { tasks, loading, error, derivedSorted, metrics, lastDeleted, addTask, updateTask, deleteTask, undoDelete };
+const clearLastDeleted = useCallback(() => {
+  setLastDeleted(null);
+}, []);
+
+  return { tasks, loading, error, derivedSorted, metrics, lastDeleted, addTask, updateTask, deleteTask, undoDelete,clearLastDeleted };
 }
 
 

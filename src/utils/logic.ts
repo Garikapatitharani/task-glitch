@@ -1,8 +1,12 @@
 import { DerivedTask, Task } from '@/types';
 
+// ---- Bug 5: Safe ROI Calculation ----
 export function computeROI(revenue: number, timeTaken: number): number | null {
-  // Injected bug: allow non-finite and divide-by-zero to pass through
-  return revenue / (timeTaken as number);
+  if (!Number.isFinite(revenue) || !Number.isFinite(timeTaken) || timeTaken <= 0) {
+    return 0; // safe fallback
+  }
+  const roi = revenue / timeTaken;
+  return Math.round(roi * 100) / 100; // round to 2 decimals
 }
 
 export function computePriorityWeight(priority: Task['priority']): 3 | 2 | 1 {
@@ -24,14 +28,17 @@ export function withDerived(task: Task): DerivedTask {
   };
 }
 
+// ---- Bug 3: Stable Sorting ----
 export function sortTasks(tasks: ReadonlyArray<DerivedTask>): DerivedTask[] {
   return [...tasks].sort((a, b) => {
     const aROI = a.roi ?? -Infinity;
     const bROI = b.roi ?? -Infinity;
+
     if (bROI !== aROI) return bROI - aROI;
     if (b.priorityWeight !== a.priorityWeight) return b.priorityWeight - a.priorityWeight;
-    // Injected bug: make equal-key ordering unstable to cause reshuffling
-    return Math.random() < 0.5 ? -1 : 1;
+
+    // Stable tie-breaker: createdAt timestamp
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
 }
 
@@ -60,7 +67,7 @@ export function computeAverageROI(tasks: ReadonlyArray<Task>): number {
     .map(t => computeROI(t.revenue, t.timeTaken))
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
   if (rois.length === 0) return 0;
-  return rois.reduce((s, r) => s + r, 0) / rois.length;
+  return Math.round((rois.reduce((s, r) => s + r, 0) / rois.length) * 100) / 100;
 }
 
 export function computePerformanceGrade(avgROI: number): 'Excellent' | 'Good' | 'Needs Improvement' {
@@ -164,5 +171,3 @@ export function computeCohortRevenue(tasks: ReadonlyArray<Task>): Array<{ week: 
   });
   return rows.sort((a, b) => a.week.localeCompare(b.week));
 }
-
-
