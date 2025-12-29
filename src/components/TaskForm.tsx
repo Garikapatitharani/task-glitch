@@ -76,6 +76,8 @@ export default function TaskForm({ open, onClose, onSubmit, existingTitles, init
       priority: ((priority || 'Medium') as Priority),
       status: ((status || 'Todo') as Status),
       notes: notes.trim() || undefined,
+      createdAt: initial?.createdAt ?? now,            // <-- add this
+      completedAt: status === 'Done' ? now : undefined,
       ...(initial ? { id: initial.id } : {}),
     };
     onSubmit(payload);
