@@ -63,37 +63,20 @@ export function useTasks(): UseTasksState {
   }
 
   // Initial Fetch
-   useEffect(() => {
-    if (fetchedRef.current) return;
-    fetchedRef.current = true;
+useEffect(() => {
+  if (fetchedRef.current) return;
+  fetchedRef.current = true;
 
-    let isMounted = true;
+  try {
+    const data = generateSalesTasks(50);
+    setTasks(data);
+  } catch (e: any) {
+    setError(e?.message ?? 'Failed to load tasks');
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
-    async function loadTasks() {
-      try {
-        const res = await fetch('/tasks.json');
-        if (!res.ok) throw new Error(`Failed to load tasks.json (${res.status})`);
-        const data = (await res.json()) as any[];
-
-        const normalized = normalizeTasks(data);
-        const finalData =
-          normalized.length > 0 ? normalized : generateSalesTasks(50);
-
-        if (isMounted) setTasks(finalData);
-      } catch (e: any) {
-        if (isMounted) setError(e?.message ?? 'Failed to load tasks');
-      } finally {
-        if (isMounted) {
-          setLoading(false);
-          fetchedRef.current = true;
-        }
-      }
-    }
-    loadTasks();
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
 
   const derivedSorted = useMemo<DerivedTask[]>(() => {
