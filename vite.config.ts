@@ -8,8 +8,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig({
-  base:'/task-glitch/',
   plugins: [react()],
+  base:'/task-glitch/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'), // works now
